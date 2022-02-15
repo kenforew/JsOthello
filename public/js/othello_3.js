@@ -11,6 +11,22 @@ class Point3D {
         this.y = y;
         this.z = z;
     }
+
+    add(pos) {
+        return new Point3D(
+            this.x + pos.x,
+            this.y + pos.y,
+            this.z + pos.z
+        );
+    }
+
+    mlt(a) {
+        return new Point3D(
+            this.x * a,
+            this.y * a,
+            this.z * a
+        );
+    }
 }
 
 class Pos3D {
@@ -58,40 +74,14 @@ class Controller extends Object3D {
     }
 }
 
-neighborlist = [
-    new Point3D(1, 1, 1),
-    new Point3D(1, 1, 0),
-    new Point3D(1, 1, -1),
-    new Point3D(1, 0, 1),
-    new Point3D(1, 0, 0),
-    new Point3D(1, 0, -1),
-    new Point3D(1, -1, 1),
-    new Point3D(1, -1, 0),
-    new Point3D(1, -1, -1),
-    
-    new Point3D(0, 1, 1),
-    new Point3D(0, 1, 0),
-    new Point3D(0, 1, -1),
-    new Point3D(0, 0, 1),
-    //new Point3D(0,0,0),
-    new Point3D(0, 0, -1),
-    new Point3D(0, -1, 1),
-    new Point3D(0, -1, 0),
-    new Point3D(0, -1, -1),
-    
-    new Point3D(-1, 1, 1),
-    new Point3D(-1, 1, 0),
-    new Point3D(-1, 1, -1),
-    new Point3D(-1, 0, 1),
-    new Point3D(-1, 0, 0),
-    new Point3D(-1, 0, -1),
-    new Point3D(-1, -1, 1),
-    new Point3D(-1, -1, 0),
-    new Point3D(-1, -1, -1)
-];
+class GameArea {
+    constructor() {
+        this.canvas = new Point2D(400, 400);
+    }
+}
 
 class Mouse {
-    constructor(){
+    constructor() {
         this.downPos = new Point2D(0, 0);
         this.escapePos = new Point2D(0, 0);
         this.updatePos = new Point2D(0, 0);
@@ -105,24 +95,55 @@ class Mouse {
 class GameManager {
     constructor() {
         this.cursor = new Point3D(2, 2, 2);
+        this.size = new Point3D(6, 6, 6);
         this.rotZ = 0;
         this.rotY = 0;
     }
 }
 
+var gameArea = new GameArea();
+var mouse = new Mouse();
+var gameManager = new GameManager();
+
+
+
 var canvas, ctx, turn = 1, count = 0, mycolor = 0, fixedPlane = "yz";
 
-var stonelist = [];
+stoneIndexList = [];
 
-for(var i = 0; i < 6; ++i) {
-    stonelist[i] = Array(6);
-    for(var j = 0; j < 6; ++j) {
-        stonelist[i][j] = Array(6);
-        for(var k = 0; k < 6; ++k) {
+for(var i = 0; i < gameManager.size.x; ++i) {
+    for(var j = 0; j < gameManager.size.y; ++j) {
+        for(var k = 0; k < gameManager.size.z; ++k) {
+            stoneIndexList.push(new Point3D(i, j, k));
+        }
+    }
+}
+
+neighborList = [];
+
+for(var i = -1; i < 2; ++i) {
+    for(var j = -1; j < 2; ++j) {
+        for(var k = -1; k < 2; ++k) {
+            if(!(i == 0 && j == 0 && k == 0)){
+                neighborList.push(new Point3D(i, j, k));
+            }
+        }
+    }
+}
+
+
+
+var stonelist = Array(gameManager.size.x);
+
+for(var i = 0; i < gameManager.size.x; ++i) {
+    stonelist[i] = Array(gameManager.size.y);
+    for(var j = 0; j < gameManager.size.y; ++j) {
+        stonelist[i][j] = Array(gameManager.size.z);
+        for(var k = 0; k < gameManager.size.z; ++k) {
             stonelist[i][j][k] = new Stone(
-                25 * (i - 2.5),
-                25 * (j - 2.5),
-                25 * (k - 2.5),
+                25 * (i - (gameManager.size.x - 1) / 2),
+                25 * (j - (gameManager.size.y - 1) / 2),
+                25 * (k - (gameManager.size.z - 1) / 2),
                 new Point3D(i, j, k),
                 0
             )
@@ -145,17 +166,15 @@ for(var i = 0; i < 2; ++i) {
 
 }
 
-var mouse = new Mouse();
-var gameManager = new GameManager();
-
-
 var you = document.getElementById("you");
-var turnplayer = document.getElementById("turnplayer");
+var turnplayer = document.getElementById("turn");
 
-canvas = document.getElementsByTagName("canvas")[0];
-ctx = canvas.getContext("2d");
-canvas.width = canvas.height = 400;
 (() => {
+    canvas = document.getElementsByTagName("canvas")[0];
+    ctx = canvas.getContext("2d");
+    canvas.width = gameArea.canvas.x;
+    canvas.height = gameArea.canvas.y;
+
     ctx.fillStyle = "rgb(127,127,127)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 })();
@@ -164,13 +183,10 @@ gameInitialize();
 
 function is_gameover() {
     var result = true;
-    for(var i = 0; i < 6; ++i) {
-        for(var j = 0; j < 6; ++j) {
-            for(var k = 0; k < 6; ++k) {
-                if(result) {
-                    result = result && (stonelist[i][j][k].color != 0);
-                }
-            }
+    for(var i = 0; i < stoneIndexList.length; ++i) {
+        if(result) {
+            var p = stoneIndexList[i];
+            result = result && (stonelist[p.x][p.y][p.z].color != 0);
         }
     }
     return result;
@@ -178,17 +194,15 @@ function is_gameover() {
 
 function gameover() {
     var black = 0, white = 0;
-    for(var i = 0; i < 6; ++i) {
-        for(var j = 0; j < 6; ++j) {
-            for(var k = 0; k < 6; ++k) {
-                if(stonelist[i][j][k].color == 1) {
-                    black++;
-                } else {
-                    white++;
-                }
-            }
+    for(var i = 0; i < stoneIndexList.length; ++i) {
+        var p = stoneIndexList[i];
+        if(stonelist[p.x][p.y][p.z] == 1) {
+            black++;
+        } else if(stonelist[p.x][p.y][p.z] == -1) {
+            white++;
         }
     }
+
     var winner;
     if(black == white) {
         winner = "draw.";
@@ -206,130 +220,113 @@ function gameover() {
 
 function is_skipped() {
     var result = false;
-    for(var i = 0; i < 6; ++i) {
-        for(var j = 0; j < 6; ++j) {
-            for(var k = 0; k < 6; ++k) {
-                if(stonelist[i][j][k].color == 0) {
-                    result = result || is_reverse(new Point3D(i, j, k));
-                }
-            }
+    for(var i = 0; i < stoneIndexList.length; ++i) {
+        var p = stoneIndexList[i];
+        if(stonelist[p.x][p.y][p.z].color == 0) {
+            result = result || is_reverse(p);
         }
     }
+
     return !result;
 }
 
 function targetInitialize() {
-    for(var i = 0; i < 6; ++i) {
-        for(var j = 0; j < 6; ++j) {
-            for(var k = 0; k < 6; ++k) {
-                stonelist[i][j][k].target = false;
-            }
-        }
+    for(var i = 0; i < stoneIndexList.length; ++i) {
+        var p = stoneIndexList[i];
+        stonelist[p.x][p.y][p.z].target = false;
     }
 }
 
 function targetActivate(pos) {
     targetInitialize();
-    for(var i = 0; i < neighborlist.length; ++i) {
-        targetActivate_internal(pos, neighborlist[i]);
+    for(var i = 0; i < neighborList.length; ++i) {
+        targetActivate_internal(pos, neighborList[i]);
     }
 }
 
 function targetActivate_internal(pos, arrow){
-    if(pos.x + arrow.x >= 0 && pos.x + arrow.x <= 5
-    && pos.y + arrow.y >= 0 && pos.y + arrow.y <= 5
-    && pos.z + arrow.z >= 0 && pos.z + arrow.z <= 5) {
-        if(stonelist[pos.x + arrow.x][pos.y + arrow.y][pos.z + arrow.z].color == -turn) {
-            var i = 2;
-            do {
-                if(pos.x + arrow.x * i < 0 || pos.x + arrow.x * i > 5
-                && pos.y + arrow.y * i < 0 || pos.y + arrow.y * i > 5
-                && pos.z + arrow.z * i < 0 || pos.z + arrow.z * i > 5) {
-                    return;
+    if(is_inBoard(pos.add(arrow))
+    && stonelist[pos.x + arrow.x][pos.y + arrow.y][pos.z + arrow.z].color == -turn) {
+        var i = 2;
+        do {
+            if(!is_inBoard(pos.add(arrow.mlt(i)))) {
+                return;
+            }                
+            
+            if(stonelist[pos.x + arrow.x * i][pos.y + arrow.y * i][pos.z + arrow.z * i].color == turn) {
+                for(var j = 1; j < i; ++j) {
+                    stonelist[pos.x + arrow.x * j][pos.y + arrow.y * j][pos.z + arrow.z * j].target = true;
                 }
-                
-                //console.log("pos,arrow,i : "+pos.x+" "+pos.y+" "+pos.z+" "+arrow.x+" "+arrow.y+" "+arrow.z+" "+i);
-                
-                if(stonelist[pos.x + arrow.x * i][pos.y + arrow.y * i][pos.z + arrow.z * i].color == turn) {
-                    for(var j = 1; j < i; ++j) {
-                        stonelist[pos.x + arrow.x * j][pos.y + arrow.y * j][pos.z + arrow.z * j].target = true;
-                    }
-                    return;
-                } else if (stonelist[pos.x + arrow.x * i][pos.y + arrow.y * i][pos.z + arrow.z * i].color == 0) {
-                    return;
-                }
-                i++;
-            } while(i < 6);
-
-            return;
-        } else {
-            return;
-        }
-    }  
+                return;
+            } else if (stonelist[pos.x + arrow.x * i][pos.y + arrow.y * i][pos.z + arrow.z * i].color == 0) {
+                return;
+            }
+            i++;
+        } while(i < 6);
+    }
+    return;
 }
 
 function reverse(pos) {
-    for(var i = 0; i < neighborlist.length; ++i) {
-        reverse_internal(pos, neighborlist[i]);
+    for(var i = 0; i < neighborList.length; ++i) {
+        reverse_internal(pos, neighborList[i]);
     }
 }
 
 function reverse_internal(pos, arrow) {
-    if(pos.x + arrow.x >= 0 && pos.x + arrow.x <= 5
-    && pos.y + arrow.y >= 0 && pos.y + arrow.y <= 5
-    && pos.z + arrow.z >= 0 && pos.z + arrow.z <= 5) {
-        if(stonelist[pos.x + arrow.x][pos.y + arrow.y][pos.z + arrow.z].color == -turn) {
-            var i = 2;
-            do {
-                if(pos.x + arrow.x * i < 0 || pos.x + arrow.x * i > 5
-                && pos.y + arrow.y * i < 0 || pos.y + arrow.y * i > 5
-                && pos.z + arrow.z * i < 0 || pos.z + arrow.z * i > 5) {
-                    return;
+    if(is_inBoard(pos.add(arrow))
+    && stonelist[pos.x + arrow.x][pos.y + arrow.y][pos.z + arrow.z].color == -turn) {
+        var i = 2;
+        do {
+            if(!is_inBoard(pos.add(arrow.mlt(i)))) {
+                return;
+            }
+            if(stonelist[pos.x + arrow.x * i][pos.y + arrow.y * i][pos.z + arrow.z * i].color == turn) {
+                for(var j = 0; j < i; ++j) {
+                    stonelist[pos.x + arrow.x * j][pos.y + arrow.y * j][pos.z + arrow.z * j].color = turn;
                 }
-                if(stonelist[pos.x + arrow.x * i][pos.y + arrow.y * i][pos.z + arrow.z * i].color == turn) {
-                    for(var j = 0; j < i; ++j) {
-                        stonelist[pos.x + arrow.x * j][pos.y + arrow.y * j][pos.z + arrow.z * j].color = turn;
-                    }
-                    return;
-                } else if (stonelist[pos.x + arrow.x * i][pos.y + arrow.y * i][pos.z + arrow.z * i].color == 0) {
-                    return;
-                }
-                i++;
-            } while(i < 6);
-        }
+                return;
+            } else if (stonelist[pos.x + arrow.x * i][pos.y + arrow.y * i][pos.z + arrow.z * i].color == 0) {
+                return;
+            }
+            i++;
+        } while(i < 6);
     }
+    return;
 }
 
 function is_reverse(pos) {
     var result = false;
-    for(var i = 0; i < neighborlist.length; ++i) {
-        result = result || is_reverse_internal(pos, neighborlist[i]);
+    for(var i = 0; i < neighborList.length; ++i) {
+        result = result || is_reverse_internal(pos, neighborList[i]);
     }
     return result;
 }
 
 function is_reverse_internal(pos, arrow) {
-    if(pos.x + arrow.x >= 0 && pos.x + arrow.x <= 5
-    && pos.y + arrow.y >= 0 && pos.y + arrow.y <= 5
-    && pos.z + arrow.z >= 0 && pos.z + arrow.z <= 5) {
-        if(stonelist[pos.x + arrow.x][pos.y + arrow.y][pos.z + arrow.z].color == -turn) {
-            var i = 2;
-            do {
-                if(pos.x + arrow.x * i < 0 || pos.x + arrow.x * i > 5
-                || pos.y + arrow.y * i < 0 || pos.y + arrow.y * i > 5
-                || pos.z + arrow.z * i < 0 || pos.z + arrow.z * i > 5) {
-                    return false;
-                }
-                if(stonelist[pos.x + arrow.x * i][pos.y + arrow.y * i][pos.z + arrow.z * i].color == turn) {
-                    return true;
-                } else if (stonelist[pos.x + arrow.x * i][pos.y + arrow.y * i][pos.z + arrow.z * i].color == 0) {
-                    return false;
-                }
-                i++;
-            } while (i < 6);
-        } else {
-            return false;
-        }
+    if(is_inBoard(pos.add(arrow))
+    && stonelist[pos.x + arrow.x][pos.y + arrow.y][pos.z + arrow.z].color == -turn) {
+        var i = 2;
+        do {
+            if(!is_inBoard(pos.add(arrow.mlt(i)))) {
+                return false;
+            }
+            if(stonelist[pos.x + arrow.x * i][pos.y + arrow.y * i][pos.z + arrow.z * i].color == turn) {
+                return true;
+            } else if (stonelist[pos.x + arrow.x * i][pos.y + arrow.y * i][pos.z + arrow.z * i].color == 0) {
+                return false;
+            }
+            i++;
+        } while (i < 6);
+    }
+    return false;
+}
+
+function is_inBoard(pos) {
+    if(pos.x >= 0 && pos.x < gameManager.size.x
+    && pos.y >= 0 && pos.y < gameManager.size.y
+    && pos.z >= 0 && pos.z < gameManager.size.z) {
+        return true;
     } else {
         return false;
     }
@@ -340,13 +337,10 @@ function turnChange() {
 }
 
 function stonelistInitialize() {
-    for(var i = 0; i < 6; ++i) {
-        for(var j = 0; j < 6; ++j) {
-            for(var k = 0; k < 6; ++k) {
-                stonelist[i][j][k].color = 0;
-            }
-        }
-    }
+    for(var i = 0; i < stoneIndexList.length; ++i) {
+        var p = stoneIndexList[i];
+        stonelist[p.x][p.y][p.z].color = 0;
+    }   
 }
 
 function gameInitialize() {
@@ -385,17 +379,22 @@ function gameDisplay() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     stonelist_line = [];
-    for(var i = 0; i < 6; ++i) {
-        for(var j = 0; j < 6; ++j) {
-            for(var k = 0; k < 6; ++k) {
-                stonelist_line.push(stonelist[i][j][k]);
-            }
-        }
+    for(var i = 0; i < stoneIndexList.length; ++i) {
+        var p = stoneIndexList[i];
+        stonelist_line.push(stonelist[p.x][p.y][p.z]);
     }
 
     var sortStoneList = sortList(stonelist_line);
 
     for(var i = 0; i < sortStoneList.length; ++i){
+        
+        var fy, fz, fr, oy, oz, size;
+        fy = sortStoneList[i].y;
+        fz = sortStoneList[i].z;
+        fr = 1 + sortStoneList[i].x / 200;
+        oy = canvas.width / 2;
+        oz = canvas.height * 3 / 8;
+        size = 10;
 
         if(sortStoneList[i].color != 0) {
             var alpha = (sortStoneList[i].target)
@@ -405,26 +404,7 @@ function gameDisplay() {
                 ? "rgba(0, 255, 255, " + alpha + ")"
                 : "rgba(255, 0, 255, " + alpha + ")";
 
-            if(sortStoneList[i].index.x == gameManager.cursor.x
-            && sortStoneList[i].index.y == gameManager.cursor.y
-            && sortStoneList[i].index.z == gameManager.cursor.z) {
-                ctx.fillStyle = "rgb(254,254,254)";
-            }
             
-            var fy, fz, fr, oy, oz, size;
-            fy = sortStoneList[i].y;
-            fz = sortStoneList[i].z;
-            fr = 1 + sortStoneList[i].x / 200;
-            oy = canvas.width / 2;
-            oz = canvas.height * 3 / 8;
-            size = 10;
-
-            ctx.beginPath();
-            ctx.arc(
-                fy * fr + oy, fz * fr + oz, size * fr,
-                0, 2 * Math.PI, false     
-            );
-            ctx.fill();
         } else {
             if(is_reverse(new Point3D(
                     sortStoneList[i].index.x,
@@ -435,37 +415,8 @@ function gameDisplay() {
                     + (Math.cos(count * Math.PI / 60) * 0.2 + 0.6)+
                 ")";
                 
-                var fy, fz, fr, oy, oz, size;
-                fy = sortStoneList[i].y;
-                fz = sortStoneList[i].z;
-                fr = 1 + sortStoneList[i].x / 200;
-                oy = canvas.width / 2;
-                oz = canvas.height * 3 / 8;
-                size = 10;
-
-                ctx.beginPath();
-                ctx.arc(
-                    fy * fr + oy, fz * fr + oz, size * fr,
-                    0, 2 * Math.PI, false     
-                );
-                ctx.fill();
             } else {
                 ctx.strokeStyle = "rgba(144,144,144,0.3)";
-
-                var fy, fz, fr, oy, oz, size;
-                fy = sortStoneList[i].y;
-                fz = sortStoneList[i].z;
-                fr = 1 + sortStoneList[i].x / 200;
-                oy = canvas.width / 2;
-                oz = canvas.height * 3 / 8;
-                size = 10;
-
-                ctx.beginPath();
-                ctx.arc(
-                    fy * fr + oy, fz * fr + oz, size * fr,
-                    0, 2 * Math.PI, false     
-                );
-                ctx.stroke();
 
             }
         }
@@ -474,27 +425,17 @@ function gameDisplay() {
         && sortStoneList[i].index.y == gameManager.cursor.y
         && sortStoneList[i].index.z == gameManager.cursor.z) {
             ctx.fillStyle = "rgb(254,254,254)";
-
-            var fy, fz, fr, oy, oz, size;
-            fy = sortStoneList[i].y;
-            fz = sortStoneList[i].z;
-            fr = 1 + sortStoneList[i].x / 200;
-            oy = canvas.width / 2;
-            oz = canvas.height * 3 / 8;
-            size = 10;
-
-            ctx.beginPath();
-            ctx.arc(
-                fy * fr + oy, fz * fr + oz, size * fr,
-                0, 2 * Math.PI, false     
-            );
-            ctx.fill();
-
-
             
         }
             
-                
+        ctx.beginPath();
+        ctx.arc(
+            fy * fr + oy, fz * fr + oz, size * fr,
+            0, 2 * Math.PI, false     
+        );
+        ctx.fill();
+        ctx.stroke();
+        
     }
 
     var sortControllerList = sortList(controllerlist);
@@ -595,9 +536,9 @@ canvas.addEventListener("mousemove", e => {
 
     if(!mouse.is_longPress
         && Math.sqrt(
-            (x - mouse.downPos.x) * (y - mouse.downPos.x)
+            (x - mouse.downPos.x) * (x - mouse.downPos.x)
             + (y - mouse.downPos.y) * (y - mouse.downPos.y)
-    ) > 10){
+    ) > 10) {
         mouse.is_longPress = true;
     }
     
@@ -608,12 +549,9 @@ canvas.addEventListener("mousemove", e => {
         gameManager.rotZ = (mouse.updatePos.x - mouse.escapePos.x) / 30;
         gameManager.rotY = (mouse.updatePos.y - mouse.escapePos.y) / 30;
         
-        for(var i = 0; i < 6; ++i) {
-            for(var j = 0; j < 6; ++j) {
-                for(var k = 0; k < 6; ++k) {
-                    stonelist[i][j][k].rotate(gameManager.rotZ, gameManager.rotY);
-                }
-            }
+        for(var i = 0; i < stoneIndexList.length; ++i) {
+            var p = stoneIndexList[i];
+            stonelist[p.x][p.y][p.z].rotate(gameManager.rotZ, gameManager.rotY);
         }
 
         for(var i = 0; i < 6; ++i) {
@@ -730,7 +668,7 @@ document.addEventListener("keydown", (e) => {
     
     if(is_reverse(
         gameManager.cursor
-    )){
+    )) {
         //console.log("hoge");
         targetActivate(
             gameManager.cursor
@@ -762,7 +700,7 @@ document.addEventListener("keydown", (e) => {
             default:
                 break;
         }
-    } else if(fixedPlane == "yz"){
+    } else if(fixedPlane == "yz") {
         switch(e.key) {
             case "ArrowLeft"://right
                 //console.log("left : "+e.key);
@@ -787,7 +725,7 @@ document.addEventListener("keydown", (e) => {
             default:
                 break;
         }
-    }else if(fixedPlane == "zx"){
+    }else if(fixedPlane == "zx") {
         switch(e.key) {
             case "ArrowLeft"://right
                 //console.log("left : "+e.key);
@@ -812,7 +750,7 @@ document.addEventListener("keydown", (e) => {
             default:
                 break;
         }
-    } else if(fixedPlane == "xy"){
+    } else if(fixedPlane == "xy") {
         switch(e.key) {
             case "ArrowLeft"://right
                 //console.log("left : "+e.key);
@@ -862,12 +800,9 @@ document.addEventListener("keydown", (e) => {
     }
 
     
-    for(var i = 0; i < 6; ++i) {
-        for(var j = 0; j < 6; ++j) {
-            for(var k = 0; k < 6; ++k) {
-                stonelist[i][j][k].rotate(keyRotZ, keyRotY);
-            }
-        }
+    for(var i = 0; i < stoneIndexList.length; ++i) {
+        var p = stoneIndexList[i];
+        stonelist[p.x][p.y][p.z].rotate(keyRotZ, keyRotY);
     }
 
     for(var i = 0; i < 6; ++i) {
@@ -884,7 +819,7 @@ socket.on("turnInitialize" ,(message) => {
 
 socket.on("you_put_stone_3", (message) => {
     const {x, y, z, color} = JSON.parse(message);
-    reverse(Point3D(x, y, z));
+    reverse(new Point3D(x, y, z));
     targetInitialize();
     turnChange();
     setLabel();
